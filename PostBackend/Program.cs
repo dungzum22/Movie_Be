@@ -58,7 +58,8 @@ if (string.IsNullOrEmpty(connectionString))
         var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : "";
         var database = uri.LocalPath.TrimStart('/');
         
-        connectionString = $"Host={uri.Host};Port={port};Database={database};Username={username};Password={password}";
+        // Render PostgreSQL requires SSL mode
+        connectionString = $"Host={uri.Host};Port={port};Database={database};Username={username};Password={password};SSL Mode=Require;Trust Server Certificate=true";
     }
 }
 
@@ -76,7 +77,20 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.Migrate();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    
+    try
+    {
+        logger.LogInformation("Attempting to apply database migrations...");
+        db.Database.Migrate();
+        logger.LogInformation("Database migrations applied successfully.");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "An error occurred while applying database migrations. The application will continue to start, but database operations may fail.");
+        // Don't throw - allow the app to start even if migration fails
+        // This is useful during initial deployment when database might not be ready yet
+    }
 }
 
 // Create uploads folder for static files
